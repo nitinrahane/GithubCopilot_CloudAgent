@@ -470,6 +470,9 @@ document.addEventListener("DOMContentLoaded", () => {
     Object.entries(filteredActivities).forEach(([name, details]) => {
       renderActivityCard(name, details);
     });
+
+    // Scroll to and highlight any activity linked via URL parameter
+    highlightLinkedActivity();
   }
 
   // Function to render a single activity card
@@ -568,6 +571,22 @@ document.addEventListener("DOMContentLoaded", () => {
           </div>
         `
         }
+        <div class="share-container">
+          <button class="share-button" data-activity="${name}" aria-label="Share this activity">
+            🔗 Share
+          </button>
+          <div class="share-popover hidden">
+            <a class="share-option share-whatsapp" href="#" target="_blank" rel="noopener noreferrer">
+              <span class="share-icon">💬</span> WhatsApp
+            </a>
+            <a class="share-option share-twitter" href="#" target="_blank" rel="noopener noreferrer">
+              <span class="share-icon">🐦</span> Twitter / X
+            </a>
+            <button class="share-option share-copy">
+              <span class="share-icon">📋</span> Copy Link
+            </button>
+          </div>
+        </div>
       </div>
     `;
 
@@ -587,13 +606,110 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
 
+    // Add share button handler
+    const shareButton = activityCard.querySelector(".share-button");
+    shareButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      handleShare(name, details, activityCard);
+    });
+
+    // Prevent clicks inside the popover from closing it
+    const sharePopover = activityCard.querySelector(".share-popover");
+    sharePopover.addEventListener("click", (event) => {
+      event.stopPropagation();
+    });
+
+    // Set up share popover links using the shared helper
+    const { shareText, shareUrl } = buildShareData(name, details);
+
+    const whatsappLink = activityCard.querySelector(".share-whatsapp");
+    whatsappLink.href = `https://wa.me/?text=${encodeURIComponent(shareText + "\n" + shareUrl)}`;
+
+    const twitterLink = activityCard.querySelector(".share-twitter");
+    twitterLink.href = `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(shareUrl)}`;
+
+    const copyButton = activityCard.querySelector(".share-copy");
+    copyButton.addEventListener("click", () => {
+      navigator.clipboard.writeText(shareUrl).then(() => {
+        copyButton.textContent = "✅ Copied!";
+        setTimeout(() => {
+          copyButton.innerHTML = '<span class="share-icon">📋</span> Copy Link';
+        }, 2000);
+      });
+    });
+
     activitiesList.appendChild(activityCard);
+  }
+
+  // Build share text and a direct link to the specific activity
+  function buildShareData(name, details) {
+    const schedule = formatSchedule(details);
+    const shareText = `Check out "${name}" at Mergington High School! ${details.description} — ${schedule}`;
+    const shareUrl =
+      window.location.origin +
+      window.location.pathname +
+      "?activity=" +
+      encodeURIComponent(name);
+    return { shareText, shareUrl };
+  }
+
+  // Handle the share action — uses native share on mobile, popover on desktop
+  function handleShare(name, details, card) {
+    const { shareText, shareUrl } = buildShareData(name, details);
+
+    if (navigator.share) {
+      navigator.share({
+        title: `${name} — Mergington High School`,
+        text: shareText,
+        url: shareUrl,
+      }).catch(() => {
+        // User cancelled or share failed — ignore
+      });
+      return;
+    }
+
+    // Fallback: toggle the share popover
+    const popover = card.querySelector(".share-popover");
+    const isHidden = popover.classList.contains("hidden");
+
+    // Close any other open popovers first
+    document.querySelectorAll(".share-popover").forEach((p) => {
+      p.classList.add("hidden");
+    });
+
+    if (isHidden) {
+      popover.classList.remove("hidden");
+    }
+  }
+
+  // If the URL contains ?activity=, highlight that card after rendering
+  function highlightLinkedActivity() {
+    const params = new URLSearchParams(window.location.search);
+    const linkedActivity = params.get("activity");
+    if (!linkedActivity) return;
+
+    const cards = document.querySelectorAll(".activity-card");
+    cards.forEach((card) => {
+      const heading = card.querySelector("h4");
+      if (heading && heading.textContent === linkedActivity) {
+        card.scrollIntoView({ behavior: "smooth", block: "center" });
+        card.classList.add("activity-highlighted");
+        setTimeout(() => card.classList.remove("activity-highlighted"), 3000);
+      }
+    });
   }
 
   // Event listeners for search and filter
   searchInput.addEventListener("input", (event) => {
     searchQuery = event.target.value;
     displayFilteredActivities();
+  });
+
+  // Close share popovers when clicking outside
+  document.addEventListener("click", () => {
+    document.querySelectorAll(".share-popover").forEach((p) => {
+      p.classList.add("hidden");
+    });
   });
 
   searchButton.addEventListener("click", (event) => {
